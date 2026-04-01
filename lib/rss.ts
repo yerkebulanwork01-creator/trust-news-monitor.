@@ -1,4 +1,5 @@
 import Parser from 'rss-parser';
+import { supabase } from '@/lib/supabase';
 
 const parser = new Parser({
   headers: {
@@ -21,7 +22,6 @@ export interface RSSItem {
 export async function fetchRSSFeed(url: string, sourceName: string): Promise<RSSItem[]> {
   try {
     const feed = await parser.parseURL(url);
-    
     return feed.items.map(item => ({
       title: item.title || 'Без названия',
       link: item.link || '',
@@ -37,12 +37,11 @@ export async function fetchRSSFeed(url: string, sourceName: string): Promise<RSS
   }
 }
 
-// 2. Функция извлечения картинок
+// 2. Извлечение картинок
 function extractImageUrl(item: any): string | undefined {
   if (item.enclosure?.url) return item.enclosure.url;
   if (item['media:content']?.$?.url) return item['media:content'].$.url;
   if (item['media:thumbnail']?.$?.url) return item['media:thumbnail'].$.url;
-  
   if (item.content) {
     const imgMatch = item.content.match(/<img[^>]+src="([^">]+)"/);
     if (imgMatch) return imgMatch[1];
@@ -50,39 +49,51 @@ function extractImageUrl(item: any): string | undefined {
   return undefined;
 }
 
-// 3. ГЛАВНАЯ ФУНКЦИЯ (которой не хватало в экспорте)
+// 3. Главная функция сбора RSS
 export async function fetchAllRSS(sources: Array<{ name: string; url: string }>): Promise<RSSItem[]> {
-  const promises = sources.map(source => 
-    fetchRSSFeed(source.url, source.name)
-  );
-  
+  const promises = sources.map(source => fetchRSSFeed(source.url, source.name));
   const results = await Promise.allSettled(promises);
-  
   return results
     .filter((result): result is PromiseFulfilledResult<RSSItem[]> => result.status === 'fulfilled')
     .flatMap(result => result.value);
 }
 
-// 4. Ключевые слова (расширенные для теста)
-const KEYWORDS = [
-  'самрук-казына', 
-  'самрук-қазына', 
+// 4. Запасные слова если Supabase недоступен
+const FALLBACK_KEYWORDS = [
+  'самрук-казына',
+  'самрук-қазына',
   'samruk-kazyna',
-  'sk-trust',
-  'skt',
-  'адиева', 
-  'skai', 
+  'skai',
   'masa',
-  'грант нко',
+  'адиева',
   'благотворительность',
-  'социальные проекты',
-  'фонд развития',
-  'казахстан', // Временно добавил для теста наполнения
-  'астана'     // Временно добавил для теста наполнения
+  'казахстан',
 ];
 
+// 5. Получить ключевые слова из Supabase
+async function getKeywordsFromDB(): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('keywords')
+      .select('word');
+    if (error || !data || data.length === 0) return FALLBACK_KEYWORDS;
+    return data.map((k: { word: string }) => k.word);
+  } catch {
+    return FALLBACK_KEYWORDS;
+  }
+}
+
+// 6. Проверка релевантности — ASYNC (из БД)
+export async function isRelevantByKeywordsAsync(text: string): Promise<boolean> {
+  if (!text) return false;
+  const keywords = await getKeywordsFromDB();
+  const lowerText = text.toLowerCase();
+  return keywords.some(kw => lowerText.includes(kw.toLowerCase()));
+}
+
+// 7. Синхронная версия (запасная, для совместимости)
 export function isRelevantByKeywords(text: string): boolean {
   if (!text) return false;
   const lowerText = text.toLowerCase();
-  return KEYWORDS.some(keyword => lowerText.includes(keyword.toLowerCase()));
+  return FALLBACK_KEYWORDS.some(kw => lowerText.includes(kw.toLowerCase()));
 }
