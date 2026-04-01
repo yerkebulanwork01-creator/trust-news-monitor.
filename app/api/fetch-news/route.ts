@@ -1,26 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { fetchAllRSS, isRelevantByKeywords } from '@/lib/rss';
+import { fetchAllRSS, isRelevantByKeywordsAsync } from '@/lib/rss';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
-  // Получаем секрет из URL: ?secret=...
   const { searchParams } = new URL(request.url);
   const secretParam = searchParams.get('secret');
   const cronSecret = process.env.CRON_SECRET;
-  
-  // Временная упрощенная проверка для браузера
+
   if (secretParam !== cronSecret) {
     return NextResponse.json({ 
       error: 'Unauthorized', 
-      message: 'Пожалуйста, добавьте ?secret=ваш_ключ в конец адресной строки' 
+      message: 'Добавьте ?secret=ваш_ключ в конец адресной строки' 
     }, { status: 401 });
   }
 
   try {
-    // 1. Получаем активные источники из Supabase
+    // 1. Получаем активные источники
     const { data: sources, error: sourcesError } = await supabase
       .from('news_sources')
       .select('*')
@@ -36,11 +34,14 @@ export async function GET(request: NextRequest) {
     const allArticles = await fetchAllRSS(sources);
     console.log(`Всего получено ${allArticles.length} статей из RSS`);
 
-    // 3. Фильтруем по ключевым словам (фонд, гранты и т.д.)
-    const relevantArticles = allArticles.filter(article =>
-      isRelevantByKeywords(`${article.title} ${article.contentSnippet}`)
-    );
-
+    // 3. Фильтруем по ключевым словам из Supabase (ASYNC)
+    const relevantArticles: typeof allArticles = [];
+    for (const article of allArticles) {
+      const relevant = await isRelevantByKeywordsAsync(
+        `${article.title} ${article.contentSnippet}`
+      );
+      if (relevant) relevantArticles.push(article);
+    }
     console.log(`Найдено релевантных статей: ${relevantArticles.length}`);
 
     let savedCount = 0;
@@ -58,11 +59,10 @@ export async function GET(request: NextRequest) {
             published_at: new Date(article.pubDate || new Date()).toISOString(),
             content: article.contentSnippet || null,
             image_url: article.imageUrl || null,
-            is_relevant: true, // По умолчанию считаем релевантным, AI уточнит позже
+            is_relevant: true,
           });
 
         if (insertError) {
-          // Если статья уже есть (дубликат URL), Supabase вернет ошибку 23505
           if (insertError.code === '23505') {
             skippedCount++;
           } else {
