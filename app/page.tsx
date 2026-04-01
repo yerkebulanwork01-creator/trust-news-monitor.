@@ -12,6 +12,7 @@ function KeywordsPanel() {
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [newWord, setNewWord] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => { fetchKeywords(); }, []);
@@ -51,6 +52,22 @@ function KeywordsPanel() {
     fetchKeywords();
   }
 
+  async function refreshNews() {
+    setRefreshing(true);
+    setMessage('⏳ Собираем новости...');
+    try {
+      const secret = 'trust_news_secret_2026';
+      await fetch(`/api/fetch-news?secret=${secret}`);
+      setMessage('⏳ Анализируем через AI...');
+      await fetch(`/api/analyze-news?secret=${secret}`);
+      setMessage('✅ Готово! Обновите страницу (F5)');
+    } catch {
+      setMessage('❌ Ошибка');
+    }
+    setRefreshing(false);
+    setTimeout(() => setMessage(''), 6000);
+  }
+
   return (
     <div style={{
       background: '#f8fafc',
@@ -72,7 +89,6 @@ function KeywordsPanel() {
         </span>
       </div>
 
-      {/* Теги */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
         {keywords.map((kw) => (
           <div key={kw.id} style={{
@@ -94,8 +110,7 @@ function KeywordsPanel() {
         ))}
       </div>
 
-      {/* Добавить */}
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
         <input
           type="text"
           value={newWord}
@@ -120,8 +135,23 @@ function KeywordsPanel() {
         >
           {loading ? '...' : '+ Добавить'}
         </button>
+        <button
+          onClick={refreshNews}
+          disabled={refreshing}
+          style={{
+            background: refreshing ? '#6ee7b7' : '#10b981',
+            color: 'white', border: 'none', borderRadius: '8px',
+            padding: '8px 16px', fontSize: '13px',
+            cursor: refreshing ? 'not-allowed' : 'pointer', fontWeight: '500',
+          }}
+        >
+          {refreshing ? '⏳ Обновляем...' : '🔄 Найти новости'}
+        </button>
         {message && (
-          <span style={{ fontSize: '13px', color: message.startsWith('✅') ? '#16a34a' : '#dc2626' }}>
+          <span style={{
+            fontSize: '13px',
+            color: message.startsWith('✅') ? '#16a34a' : message.startsWith('⏳') ? '#d97706' : '#dc2626'
+          }}>
             {message}
           </span>
         )}
@@ -227,7 +257,7 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-6 py-6">
 
-        {/* ── Ключевые слова вверху ── */}
+        {/* Ключевые слова */}
         <KeywordsPanel />
 
         {/* Stats */}
