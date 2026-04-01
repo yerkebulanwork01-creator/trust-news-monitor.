@@ -23,7 +23,6 @@ export async function analyzeArticle(
   }
 
   const snippet = content.substring(0, 1000);
-
   const prompt = `Проанализируй новость о фонде "Samruk-Kazyna Trust". Заголовок: "${title}". Текст: "${snippet}". Ответь ТОЛЬКО чистым JSON без markdown: {"is_relevant": true/false, "sentiment": "positive/neutral/negative", "sentiment_score": 0-10, "main_topic": "тема", "keywords": [], "people_mentioned": [], "projects_mentioned": [], "summary_ru": "суть"}`;
 
   try {
@@ -35,7 +34,7 @@ export async function analyzeArticle(
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20240620",
+        model: "claude-sonnet-4-20250514", // ✅ обновлено с claude-3-5-sonnet-20240620
         max_tokens: 1000,
         messages: [{ role: "user", content: prompt }]
       })
@@ -57,7 +56,7 @@ export async function analyzeArticle(
   }
 }
 
-// Batch анализ (аналогично исправлен)
+// Batch анализ
 export async function analyzeBatch(
   articles: Array<{ title: string; content: string }>
 ): Promise<AnalysisResult[]> {
@@ -76,13 +75,14 @@ export async function analyzeBatch(
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: "claude-3-haiku-20240307",
+        model: "claude-haiku-4-5-20251001", // ✅ обновлено с claude-3-haiku-20240307
         max_tokens: 2000,
         messages: [{ role: "user", content: prompt }]
       })
     });
 
     if (!response.ok) return [];
+
     const data = await response.json();
     const cleanText = data.content[0].text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     return JSON.parse(cleanText);
